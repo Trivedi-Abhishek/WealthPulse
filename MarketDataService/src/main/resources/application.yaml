@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: MarketDataService
+
+alphavantage:
+  api:
+    baseurl: https://www.alphavantage.co
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      alpha-vantage:
+        failureRateThreshold: 50 # Trips if 50% or more calls fail
+        slidingWindowSize: 10 # Evaluates the last 10 calls
+
+  retry:
+    instances:
+      alpha-vantage:
+        maxAttempts: 3
+        waitDuration: 2s
+
+  ratelimiter:
+    instances:
+      alpha-vantage:
+        limitForPeriod: 5
+        limitRefreshPeriod: 1m
+
+kafka:
+  producer:
+    key-serializer: org.apache.kafka.common.serialization.StringSerializer
+    value-serializer:  org.apache.kafka.common.serialization.StringSerializer
+  consumer:
+    group-id: wealth-plus-service-group
+    key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+    auto-offset-reset: earliest
+  listener:
+    ack-mode: manual
