@@ -3,7 +3,7 @@ package com.marketdataservice.service;
 import com.marketdataservice.dto.AlphaVantageResponseDto;
 import com.marketdataservice.dto.GlobalQuote;
 import com.marketdataservice.dto.MarketStockPriceEvent;
-import com.marketdataservice.kafka.producer.KafkaPublisher;
+import com.marketdataservice.kafka.producer.MarketDataProducer;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
 import io.github.resilience4j.retry.annotation.Retry;
@@ -28,7 +28,7 @@ import java.util.Objects;
 public class AlphaVantageService {
 
     private final WebClient webClient;
-    private final KafkaPublisher kafkaPublisher;
+    private final MarketDataProducer marketDataProducer;
     private final RedisTemplate<String, MarketStockPriceEvent> redisTemplate;
 
     private String apiKey;
@@ -69,7 +69,7 @@ public class AlphaVantageService {
         MarketStockPriceEvent marketStockPriceEvent=new MarketStockPriceEvent(globalQuote.getSymbol(),
                 new BigDecimal(globalQuote.getPrice()), LocalDate.parse(globalQuote.getLatestTradingDay(), DateTimeFormatter.ofPattern("yyyy-MM-dd")),
                 Instant.now());
-        kafkaPublisher.publishMarketPriceUpdatedEvent(marketStockPriceEvent);
+        marketDataProducer.publishMarketPriceUpdatedEvent(marketStockPriceEvent);
         log.info("Published market update for {}", symbol);
         redisTemplate.opsForValue().set("price:"+symbol,
                 marketStockPriceEvent,

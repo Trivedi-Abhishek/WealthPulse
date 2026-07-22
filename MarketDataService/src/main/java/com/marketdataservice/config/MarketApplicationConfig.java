@@ -11,7 +11,7 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.web.reactive.function.client.WebClient;
 
 @Configuration
-public class ApplicationConfig {
+public class MarketApplicationConfig {
 
     @Bean
     public NewTopic createMarketPriceUpdatedTopic() {
