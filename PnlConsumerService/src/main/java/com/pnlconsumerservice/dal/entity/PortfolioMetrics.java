@@ -1,4 +1,4 @@
-package com.portfolioservice.dal.entity;
+package com.pnlconsumerservice.dal.entity;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -38,7 +38,3 @@ public class PortfolioMetrics {
     private BigDecimal xirr;
 
 }
-
-// 1. Schema structure
-//Investor registers itself-> creates portfolio-> creates an order->creates holding
-// 2.

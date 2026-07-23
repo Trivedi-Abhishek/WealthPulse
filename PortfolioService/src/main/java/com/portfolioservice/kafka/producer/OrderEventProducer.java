@@ -1,6 +1,6 @@
 package com.portfolioservice.kafka.producer;
 
-import com.portfolioservice.dal.entity.Order;
+import com.portfolioservice.dal.dto.HoldingUpdatedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.producer.RecordMetadata;
@@ -14,16 +14,16 @@ import java.util.Objects;
 @Slf4j
 public class OrderEventProducer {
 
-    private final KafkaTemplate<String, Order> kafkaTemplate;
+    private final KafkaTemplate<String, HoldingUpdatedEvent> kafkaTemplate;
 
-    public void publishOrderExecutedEvent(Order order) {
+    public void publishHoldingUpdatedEvent(HoldingUpdatedEvent holdingUpdatedEvent) {
 
-        kafkaTemplate.send("portfolio.order.executed", String.valueOf(order.getId()), order).whenComplete((res, exc)->{
+        kafkaTemplate.send("portfolio.order.executed", String.valueOf(holdingUpdatedEvent.portfolioId()), holdingUpdatedEvent).whenComplete((res, exc)->{
             if(Objects.isNull(exc)) {
                 RecordMetadata recordMetadata = res.getRecordMetadata();
                 log.info(
-                        "Order {} published successfully. topic={}, partition={}, offset={}",
-                        order.getId(),
+                        "Portfolio {} published successfully. topic={}, partition={}, offset={}",
+                        holdingUpdatedEvent.portfolioId(),
                         recordMetadata.topic(),
                         recordMetadata.partition(),
                         recordMetadata.offset()

@@ -1,5 +1,7 @@
 package com.portfolioservice.config;
 
+import com.portfolioservice.dal.dto.HoldingUpdatedEvent;
+import com.portfolioservice.dal.dto.OrderExecutedEvent;
 import com.portfolioservice.dal.entity.Order;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -28,7 +30,7 @@ public class PortfolioApplicationConfig {
     }
 
     @Bean
-    public ProducerFactory<String, Order> producerFactory() {
+    public ProducerFactory<String, HoldingUpdatedEvent> producerFactory() {
         Map<String, Object> config = new HashMap<>();
 
         config.put(

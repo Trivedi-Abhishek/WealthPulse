@@ -1,6 +1,7 @@
 package com.portfolioservice.service;
 
 import com.portfolioservice.dal.dto.CreateOrderRequest;
+import com.portfolioservice.dal.dto.HoldingUpdatedEvent;
 import com.portfolioservice.dal.entity.Holdings;
 import com.portfolioservice.dal.entity.Order;
 import com.portfolioservice.dal.repository.HoldingsRepository;
@@ -15,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Optional;
 
 @Service
@@ -51,7 +53,8 @@ public class OrderService {
         }).orElse(createHoldings(createOrderRequest));
 
         holdingsRepository.save(holdings);
-        orderEventProducer.publishOrderExecutedEvent(order);
+        HoldingUpdatedEvent holdingUpdatedEvent=new HoldingUpdatedEvent(portfolioId, symbol, holdings.getQuantity(), holdings.getAveragePrice(), Instant.now());
+        orderEventProducer.publishHoldingUpdatedEvent(holdingUpdatedEvent);
         return order.getId();
     }
 
@@ -115,8 +118,8 @@ public class OrderService {
         }
 
         holdingsRepository.save(holdings);
-
-        orderEventProducer.publishOrderExecutedEvent(order);
+        HoldingUpdatedEvent holdingUpdatedEvent=new HoldingUpdatedEvent(portfolioId, symbol, holdings.getQuantity(), holdings.getAveragePrice(), Instant.now());
+        orderEventProducer.publishHoldingUpdatedEvent(holdingUpdatedEvent);
         return order.getId();
     }
 }
