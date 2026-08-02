@@ -2,6 +2,7 @@ package com.portfolioservice.service;
 
 import com.portfolioservice.dal.dto.CreateOrderRequest;
 import com.portfolioservice.dal.dto.HoldingUpdatedEvent;
+import com.portfolioservice.dal.dto.OrderExecutedEvent;
 import com.portfolioservice.dal.entity.Holdings;
 import com.portfolioservice.dal.entity.Order;
 import com.portfolioservice.dal.repository.HoldingsRepository;
@@ -10,6 +11,9 @@ import com.portfolioservice.dal.repository.PortfolioRepository;
 import com.portfolioservice.enums.OrderStatusEnum;
 import com.portfolioservice.enums.OrderTypeEnum;
 import com.portfolioservice.enums.StatusEnum;
+import com.portfolioservice.exception.HoldingNotFoundException;
+import com.portfolioservice.exception.InsufficientHoldingException;
+import com.portfolioservice.exception.PortfolioNotFoundException;
 import com.portfolioservice.kafka.producer.OrderEventProducer;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -17,7 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.Optional;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -34,7 +38,7 @@ public class OrderService {
         Long portfolioId = createOrderRequest.getPortfolioId();
         String symbol = createOrderRequest.getSymbol();
         if(!portfolioRepository.existsById(portfolioId)) {
-            // throw error
+            throw new PortfolioNotFoundException(portfolioId);
         }
 
         Order order = createOrderEntity(createOrderRequest, portfolioId, symbol, OrderTypeEnum.BUY);
@@ -53,6 +57,8 @@ public class OrderService {
         }).orElse(createHoldings(createOrderRequest));
 
         holdingsRepository.save(holdings);
+
+        orderEventProducer.publishOrderExecutedEvent(new OrderExecutedEvent(order.getId(), portfolioId, symbol, OrderTypeEnum.BUY, createOrderRequest.getPrice(), createOrderRequest.getQuantity()));
         HoldingUpdatedEvent holdingUpdatedEvent=new HoldingUpdatedEvent(portfolioId, symbol, holdings.getQuantity(), holdings.getAveragePrice(), Instant.now());
         orderEventProducer.publishHoldingUpdatedEvent(holdingUpdatedEvent);
         return order.getId();
@@ -79,23 +85,19 @@ public class OrderService {
         String symbol = request.getSymbol();
 
         if (!portfolioRepository.existsById(portfolioId)) {
-//            throw new PortfolioNotFoundException();
+            throw new PortfolioNotFoundException(portfolioId);
         }
 
-
-        Optional<Holdings> optionalHoldings = holdingsRepository
+        Holdings holdings = holdingsRepository
                 .findByPortfolioIdAndSymbolAndStatus(
                         portfolioId,
                         symbol,
                         StatusEnum.A
-                );
+                )
+                .orElseThrow(() -> new HoldingNotFoundException(portfolioId, symbol));
 
-        if(optionalHoldings.isEmpty()) {
-//            throw new HoldingNotFoundException();
-        }
-        Holdings holdings = optionalHoldings.get();
         if (holdings.getQuantity() < request.getQuantity()) {
-//            throw new InsufficientHoldingException();
+            throw new InsufficientHoldingException(portfolioId, symbol, holdings.getQuantity(), request.getQuantity());
         }
 
         Order order = createOrderEntity(
@@ -106,7 +108,7 @@ public class OrderService {
         );
 
 
-        orderRepository.save(order);
+        order = orderRepository.save(order);
 
         Long remainingQty =
                 holdings.getQuantity() - request.getQuantity();
@@ -118,8 +120,17 @@ public class OrderService {
         }
 
         holdingsRepository.save(holdings);
+
+        orderEventProducer.publishOrderExecutedEvent(new OrderExecutedEvent(order.getId(), portfolioId, symbol, OrderTypeEnum.SELL, request.getPrice(), request.getQuantity()));
         HoldingUpdatedEvent holdingUpdatedEvent=new HoldingUpdatedEvent(portfolioId, symbol, holdings.getQuantity(), holdings.getAveragePrice(), Instant.now());
         orderEventProducer.publishHoldingUpdatedEvent(holdingUpdatedEvent);
         return order.getId();
+    }
+
+    public List<Order> getOrders(Long portfolioId) {
+        if (!portfolioRepository.existsById(portfolioId)) {
+            throw new PortfolioNotFoundException(portfolioId);
+        }
+        return orderRepository.findByPortfolioIdOrderByCreatedDateDesc(portfolioId);
     }
 }

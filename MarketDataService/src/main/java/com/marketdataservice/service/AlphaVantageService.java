@@ -1,8 +1,8 @@
 package com.marketdataservice.service;
 
-import com.marketdataservice.dto.AlphaVantageResponseDto;
-import com.marketdataservice.dto.GlobalQuote;
-import com.marketdataservice.dto.MarketStockPriceEvent;
+import com.marketdataservice.dal.dto.AlphaVantageResponseDto;
+import com.marketdataservice.dal.dto.GlobalQuote;
+import com.marketdataservice.dal.dto.MarketStockPriceEvent;
 import com.marketdataservice.kafka.producer.MarketDataProducer;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import io.github.resilience4j.ratelimiter.annotation.RateLimiter;
@@ -65,10 +65,18 @@ public class AlphaVantageService {
             return;
         }
 
+        MarketStockPriceEvent existingMarketStockPriceEvent = redisTemplate.opsForValue().get("price:" + symbol);
+        BigDecimal previousPrice=null;
+        if(Objects.nonNull(existingMarketStockPriceEvent)) {
+            previousPrice=existingMarketStockPriceEvent.price();
+        }
+
         GlobalQuote globalQuote = alphaVantageResponseDto.getGlobalQuote();
+
         MarketStockPriceEvent marketStockPriceEvent=new MarketStockPriceEvent(globalQuote.getSymbol(),
-                new BigDecimal(globalQuote.getPrice()), LocalDate.parse(globalQuote.getLatestTradingDay(), DateTimeFormatter.ofPattern("yyyy-MM-dd")),
+                new BigDecimal(globalQuote.getPrice()), previousPrice, LocalDate.parse(globalQuote.getLatestTradingDay(), DateTimeFormatter.ofPattern("yyyy-MM-dd")),
                 Instant.now());
+
         marketDataProducer.publishMarketPriceUpdatedEvent(marketStockPriceEvent);
         log.info("Published market update for {}", symbol);
         redisTemplate.opsForValue().set("price:"+symbol,

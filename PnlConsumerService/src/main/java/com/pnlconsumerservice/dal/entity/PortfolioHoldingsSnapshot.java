@@ -17,6 +17,7 @@ import java.math.BigDecimal;
 @Entity
 @Table(name="portfolio_holdings_snapshots")
 @EntityListeners(AuditingEntityListener.class)
+// this entity is for portfolio/symbol performance
 public class PortfolioHoldingsSnapshot {
 
     @Id

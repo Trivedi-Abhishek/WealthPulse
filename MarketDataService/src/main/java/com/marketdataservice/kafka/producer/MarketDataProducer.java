@@ -2,7 +2,7 @@ package com.marketdataservice.kafka.producer;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.marketdataservice.dto.MarketStockPriceEvent;
+import com.marketdataservice.dal.dto.MarketStockPriceEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.producer.RecordMetadata;

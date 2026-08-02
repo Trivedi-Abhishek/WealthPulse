@@ -1,4 +1,4 @@
-package com.marketdataservice.dto;
+package com.marketdataservice.dal.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Data;

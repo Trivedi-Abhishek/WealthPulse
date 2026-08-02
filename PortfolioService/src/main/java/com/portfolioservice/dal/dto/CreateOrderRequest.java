@@ -1,7 +1,6 @@
 package com.portfolioservice.dal.dto;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.portfolioservice.enums.OrderTypeEnum;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -20,11 +19,6 @@ public class CreateOrderRequest {
     @NotBlank
     @JsonProperty("symbol")
     private String symbol;
-
-    @NotNull
-    @Positive
-    @JsonProperty("order_type")
-    private OrderTypeEnum orderType;
 
     @NotNull
     @Positive

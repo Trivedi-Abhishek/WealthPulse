@@ -4,11 +4,13 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.pnlconsumerservice.dal.dto.HoldingUpdatedEvent;
 import com.pnlconsumerservice.dal.dto.MarketStockPriceEvent;
+import com.pnlconsumerservice.dal.dto.PortfolioMetricsEvent;
 import com.pnlconsumerservice.dal.entity.PortfolioHoldingsSnapshot;
 import com.pnlconsumerservice.dal.entity.PortfolioMetrics;
 import com.pnlconsumerservice.dal.enums.StatusEnum;
 import com.pnlconsumerservice.dal.repository.PortfolioHoldingsSnapshotRepository;
 import com.pnlconsumerservice.dal.repository.PortfolioMetricsRepository;
+import com.pnlconsumerservice.kafka.producer.PnlDataProducer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.annotation.KafkaListener;
@@ -28,6 +30,7 @@ public class PnlDataConsumer {
     private final ObjectMapper objectMapper;
     private final PortfolioHoldingsSnapshotRepository portfolioHoldingsSnapshotRepository;
     private final PortfolioMetricsRepository portfolioMetricsRepository;
+    private final PnlDataProducer pnlDataProducer;
 
     @KafkaListener(topics = "market.price.updated", groupId = "wealth-plus-service-group")
     public void listenMarketStockPriceEvent(String srcMarketStockPriceEvent) {
@@ -48,12 +51,11 @@ public class PnlDataConsumer {
     }
 
 
-    @KafkaListener(topics = "portfolio.order.executed", groupId = "wealth-plus-service-group")
-    public void listenPortfolioOrderEvent(String srcHoldingUpdatedEvent) {
+    @KafkaListener(topics = "portfolio.holdings.updated", groupId = "wealth-plus-service-group")
+    public void listenPortfolioHoldingsUpdatedEvent(String srcHoldingUpdatedEvent) {
 
         try {
             HoldingUpdatedEvent holdingUpdatedEvent = objectMapper.readValue(srcHoldingUpdatedEvent, HoldingUpdatedEvent.class);
-
             Optional<PortfolioHoldingsSnapshot> optionalSnapshot=portfolioHoldingsSnapshotRepository.findByPortfolioIdAndSymbol(holdingUpdatedEvent.portfolioId(), holdingUpdatedEvent.symbol());
             if(holdingUpdatedEvent.quantity()==0L){
                 return;
@@ -103,7 +105,8 @@ public class PnlDataConsumer {
         portfolioMetrics.setCurrentValue(currentValue);
         portfolioMetrics.setPnl(currentValue.subtract(investedAmount));
 
-
+        PortfolioMetricsEvent portfolioMetricsEvent = new PortfolioMetricsEvent(portfolioMetrics.getPortfolioId(), portfolioMetrics.getCurrentValue(), portfolioMetrics.getInvestedAmount(), portfolioMetrics.getPnl());
+        pnlDataProducer.publishPortfolioMetrics(portfolioMetricsEvent);
     }
 
 }
