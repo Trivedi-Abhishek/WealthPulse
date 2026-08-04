@@ -1,6 +1,5 @@
 package com.marketdataservice.config;
 
-import com.marketdataservice.dal.dto.MarketStockPriceEvent;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -19,9 +18,9 @@ public class MarketApplicationConfig {
     }
 
     @Bean
-    public RedisTemplate<String, MarketStockPriceEvent> redisTemplate(RedisConnectionFactory redisConnectionFactory) {
+    public RedisTemplate<String, String> redisTemplate(RedisConnectionFactory redisConnectionFactory) {
 
-        RedisTemplate<String, MarketStockPriceEvent> redisTemplate=new RedisTemplate<>();
+        RedisTemplate<String, String> redisTemplate=new RedisTemplate<>();
         redisTemplate.setConnectionFactory(redisConnectionFactory);
         redisTemplate.setKeySerializer(new StringRedisSerializer());
         redisTemplate.setValueSerializer(new StringRedisSerializer());
@@ -30,7 +29,7 @@ public class MarketApplicationConfig {
     }
 
     @Bean
-    public WebClient webClient(@Value("alphavantage.api.baseurl") String baseUrl) {
+    public WebClient webClient(@Value("${alphavantage.api.baseurl}") String baseUrl) {
         return WebClient.builder().baseUrl(baseUrl).build();
     }
 }
