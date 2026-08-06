@@ -1,15 +1,16 @@
 package com.alertservice.service;
 
-import com.alertservice.dal.AlertPortfolioHoldingsRepository;
+import com.alertservice.dal.repository.AlertPortfolioHoldingsRepository;
 import com.alertservice.dal.dto.HoldingUpdatedEvent;
 import com.alertservice.dal.entity.AlertPortfolioHoldings;
 import com.alertservice.dal.enums.StatusEnum;
 import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Repository;
+import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
 import java.util.Optional;
 
-@Repository
+@Service
 @RequiredArgsConstructor
 public class AlertPortfolioHoldingService {
 
@@ -35,6 +36,7 @@ public class AlertPortfolioHoldingService {
                         AlertPortfolioHoldings.builder()
                                 .portfolioId(marketStockPriceEvent.portfolioId())
                                 .symbol(marketStockPriceEvent.symbol())
+                                .latestMarketPrice(BigDecimal.ZERO)
                                 .status(StatusEnum.A)
                                 .build());
 
