@@ -13,17 +13,18 @@ market.price.updated        MarketDataService  → PnlConsumerService, AlertServ
 portfolio.order.executed    PortfolioService   → (audit only, no consumer yet)
 portfolio.holdings.updated  PortfolioService   → PnlConsumerService, AlertService
 portfolio.metrics.updated   PnlConsumerService → AlertService
-alert.triggered             AlertService       → NotificationService (not built yet)
+alert.triggered             AlertService       → NotificationService
 portfolio.rebalance.triggered  AlertService    → RoboAdvisorService (not built yet)
 ```
 
 Build status:
 - `PortfolioService`, `MarketDataService`, `PnlConsumerService`, `AlertService` — functionally complete per the target design.
-- `NotificationService`, `RoboAdvisorService` — not started.
+- `NotificationService` — in progress: consumes `alert.triggered`, persists to `notification_history`, exposes `GET /notifications?portfolio_id=`. Does not yet resolve investor contact info (log+persist only, no real delivery) — see Known gaps.
+- `RoboAdvisorService` — not started.
 
 ## Repository structure
 
-Each service has its own `pom.xml`/`mvnw` and lives in its own top-level directory: `PortfolioService`, `MarketDataService`, `PnlConsumerService`, `AlertService` (and eventually `NotificationService`, `RoboAdvisorService`). The root `pom.xml`/`src`/`mvnw` are leftover scaffolding from initial project generation — not a parent/aggregator, not part of the running system. Always work inside the relevant service directory.
+Each service has its own `pom.xml`/`mvnw` and lives in its own top-level directory: `PortfolioService`, `MarketDataService`, `PnlConsumerService`, `AlertService`, `NotificationService` (and eventually `RoboAdvisorService`). The root `pom.xml`/`src`/`mvnw` are leftover scaffolding from initial project generation — not a parent/aggregator, not part of the running system. Always work inside the relevant service directory.
 
 There is no API gateway, service registry, or shared library module — services only communicate via Kafka topics and hand-duplicate the DTO/record definitions they need locally (see `rules/kafka-events.md`).
 
@@ -55,18 +56,19 @@ docker compose up -d   # from repo root — starts Postgres (5432), Kafka (9092)
 
 ## Architecture: event flow across services
 
-`PortfolioService` is the only service exposing a REST API, consumed by external clients — no synchronous inter-service HTTP calls exist anywhere.
+`PortfolioService` and `NotificationService` are the only services exposing REST APIs (full read/write on `PortfolioService`; read-only notification history on `NotificationService`), both consumed by external clients — no synchronous inter-service HTTP calls exist anywhere.
 
 1. `MarketDataService.AlphaVantageService` polls Alpha Vantage (`@Scheduled(fixedDelay = 30000)`, wrapped in resilience4j circuit breaker/retry/rate limiter) for `AAPL, MSFT, GOOG, AMZN, TSLA`, diffs against the price cached in Redis, computes `absoluteChange`/`percentageChange`, and publishes `MarketStockPriceEvent` to `market.price.updated`.
 2. `PortfolioService.OrderService.buyOrder`/`sellOrder` (via `OrderController`'s `POST /orders/buy`/`POST /orders/sell`) update `Holdings` (weighted-average price, quantity, `@Version` optimistic locking) inside a `@Transactional` method, then publish **both** `OrderExecutedEvent`→`portfolio.order.executed` (audit trail) and `HoldingUpdatedEvent`→`portfolio.holdings.updated` (canonical, consumed downstream) — itself, directly. Also exposes `POST /investors`, `POST /investors/{id}/portfolios`, `GET /orders`, `GET /holdings`.
 3. `PnlConsumerService.PnlDataConsumer` listens to `portfolio.holdings.updated` and `market.price.updated` independently, keeps `PortfolioHoldingsSnapshot` current, recalculates `PortfolioMetrics` (current value, invested amount, PnL), and publishes `PortfolioMetricsEvent` to `portfolio.metrics.updated`. It does **not** re-publish holdings — that would make `AlertService`'s holdings copy depend on `PnlConsumerService` being alive, which defeats the point of independent per-service read models.
 4. `AlertService.AlertServiceConsumer` listens to all three downstream topics, independently of `PnlConsumerService`. `market.price.updated` → `PriceAlertService` (updates `AlertPortfolioHoldings.latestMarketPrice`, evaluates `PRICE_TARGET`/`STOP_LOSS` configs, then re-evaluates `PORTFOLIO_DRIFT` for every portfolio holding that symbol). `portfolio.metrics.updated` → `PortfolioAlertService` (evaluates `PORTFOLIO_GAIN`/`PORTFOLIO_LOSS`). `portfolio.holdings.updated` → `AlertPortfolioHoldingService` (keeps the local holdings read model current). Alert evaluation is a Strategy pattern: `service/evaluator/AlertEvaluator` has one implementation per `AlertTypeEnum` value, assembled into a `Map<AlertTypeEnum, AlertEvaluator>` bean — add a new alert type by adding a new `@Component` evaluator, not by editing a dispatch switch. `PORTFOLIO_DRIFT` is approximated as single-symbol concentration risk (largest holding's % of portfolio value) since the domain has no explicit target-allocation model. A matched evaluation goes through `AlertFiringService`, which dedups via Redis (`alert:{alertConfigId}`, atomic `SETNX`, 30 min TTL) before writing `AlertHistory` and publishing `alert.triggered` (and, for drift, `portfolio.rebalance.triggered` too).
+5. `NotificationService.AlertTriggeredEventConsumer` listens to `alert.triggered` independently, persists each event to `NotificationHistory` (an immutable audit log, mirroring `AlertService`'s `AlertHistory`), and logs it — a stand-in for real delivery (email/SMS/push) until investor contact resolution exists (see Known gaps). Exposes `GET /notifications?portfolio_id=` for read access, following `PortfolioService`'s REST conventions.
 
 Kafka records are keyed by portfolio ID (or symbol for market data, or symbol as a fallback key for portfolio-less alert configs) for per-entity ordering within a partition; topics have 3 partitions / replication factor 1.
 
 ## Per-service package layout
 
-`dal/dto` (event/API payload records, hand-duplicated per service — see `rules/kafka-events.md`), `dal/entity` (JPA entities), `dal/repository` (Spring Data repositories — every repository lives here, no exceptions), `dal/enums` or `enums/` (naming inconsistent between services, check before adding), `kafka/producer`, `kafka/consumer`, `config` (`NewTopic`/`ProducerFactory`/`RedisTemplate`/`WebClient` beans), `service`, `controller` (`PortfolioService` only).
+`dal/dto` (event/API payload records, hand-duplicated per service — see `rules/kafka-events.md`), `dal/entity` (JPA entities), `dal/repository` (Spring Data repositories — every repository lives here, no exceptions), `dal/enums` or `enums/` (naming inconsistent between services, check before adding), `kafka/producer`, `kafka/consumer`, `config` (`NewTopic`/`ProducerFactory`/`RedisTemplate`/`WebClient` beans), `service`, `controller` (`PortfolioService`, `NotificationService`).
 
 All Kafka consumers share `group-id: wealth-plus-service-group` across services — a cross-service value, not per-service.
 
@@ -80,7 +82,8 @@ See `rules/` for the conventions established while building this out — read th
 
 ## Known gaps (don't be surprised by these)
 
-- `NotificationService` and `RoboAdvisorService` don't exist yet — nothing currently consumes `alert.triggered` or `portfolio.rebalance.triggered`.
+- `RoboAdvisorService` doesn't exist yet — nothing consumes `portfolio.rebalance.triggered`.
+- `NotificationService` consumes `alert.triggered` but cannot resolve which investor/email to notify — no event in the system carries investor identity or contact info past `PortfolioService`'s own DB (`Portfolio.investorId` and `Investor.email` are never published to Kafka). Currently just logs + persists to `notification_history`. Resolving this for real requires threading `investorId` through `HoldingUpdatedEvent` → `AlertPortfolioHoldings`/`AlertTriggeredEvent`, plus a new `investor.registered` event from `PortfolioService` — a multi-service follow-up, not a `NotificationService`-only change.
 - No `AlertConfiguration` rows are seeded anywhere (no admin API to create them yet) — `AlertService`'s evaluators are fully wired but will never fire until some rows exist in that table.
 - Kafka publish failures are only logged; every producer has a `// TODO: outbox publisher` comment marking this as a known placeholder.
 - No tests beyond the generated `*ApplicationTests` smoke test in any service.
