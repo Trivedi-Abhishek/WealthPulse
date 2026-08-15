@@ -16,11 +16,11 @@ public class AlertPortfolioHoldingService {
 
     private final AlertPortfolioHoldingsRepository alertPortfolioHoldingsRepository;
 
-    public void updateHolding(HoldingUpdatedEvent marketStockPriceEvent) {
+    public void updateHolding(HoldingUpdatedEvent holdingUpdatedEvent) {
 
-        Optional<AlertPortfolioHoldings> optionalAlertPortfolioHoldings=alertPortfolioHoldingsRepository.findByPortfolioIdAndSymbolAndStatus(marketStockPriceEvent.portfolioId(), marketStockPriceEvent.symbol(), StatusEnum.A);
+        Optional<AlertPortfolioHoldings> optionalAlertPortfolioHoldings=alertPortfolioHoldingsRepository.findByPortfolioIdAndSymbolAndStatus(holdingUpdatedEvent.portfolioId(), holdingUpdatedEvent.symbol(), StatusEnum.A);
 
-        if (marketStockPriceEvent.quantity() == 0L) {
+        if (holdingUpdatedEvent.quantity() == 0L) {
 
             optionalAlertPortfolioHoldings.ifPresent(holdings->{
                 holdings.setStatus(StatusEnum.I);
@@ -34,14 +34,14 @@ public class AlertPortfolioHoldingService {
         AlertPortfolioHoldings holding =
                 optionalAlertPortfolioHoldings.orElse(
                         AlertPortfolioHoldings.builder()
-                                .portfolioId(marketStockPriceEvent.portfolioId())
-                                .symbol(marketStockPriceEvent.symbol())
+                                .portfolioId(holdingUpdatedEvent.portfolioId())
+                                .symbol(holdingUpdatedEvent.symbol())
                                 .latestMarketPrice(BigDecimal.ZERO)
                                 .status(StatusEnum.A)
                                 .build());
 
-        holding.setQuantity(marketStockPriceEvent.quantity());
-        holding.setAveragePrice(marketStockPriceEvent.averagePrice());
+        holding.setQuantity(holdingUpdatedEvent.quantity());
+        holding.setAveragePrice(holdingUpdatedEvent.averagePrice());
 
         alertPortfolioHoldingsRepository.save(holding);
 
