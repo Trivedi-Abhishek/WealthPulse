@@ -1,6 +1,6 @@
 # REST API, DTO, and validation conventions
 
-Currently applies to `PortfolioService` — the only service with a REST API — but follow this convention if any other service ever grows one (e.g. an admin API on `AlertService`).
+Currently applies to `PortfolioService`, `NotificationService`, and `RoboAdvisorService` — follow this convention if any other service ever grows a REST API too (e.g. an admin API on `AlertService`).
 
 ## Request DTOs
 

@@ -1,6 +1,6 @@
 # Data layer conventions
 
-Applies to any service using `spring-boot-starter-data-jpa` + `spring-boot-starter-flyway` (currently `PortfolioService`, `PnlConsumerService`, `AlertService`).
+Applies to any service using `spring-boot-starter-data-jpa` + `spring-boot-starter-flyway` (currently `PortfolioService`, `PnlConsumerService`, `AlertService`, `NotificationService`, `RoboAdvisorService`).
 
 ## Every JPA+Flyway service needs this boilerplate, or it silently doesn't work
 
