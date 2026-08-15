@@ -4,15 +4,20 @@ import com.portfolioservice.dal.dto.CreateOrderRequest;
 import com.portfolioservice.dal.dto.HoldingUpdatedEvent;
 import com.portfolioservice.dal.dto.OrderExecutedEvent;
 import com.portfolioservice.dal.entity.Holdings;
+import com.portfolioservice.dal.entity.Investor;
 import com.portfolioservice.dal.entity.Order;
+import com.portfolioservice.dal.entity.Portfolio;
 import com.portfolioservice.dal.repository.HoldingsRepository;
+import com.portfolioservice.dal.repository.InvestorRepository;
 import com.portfolioservice.dal.repository.OrderRepository;
 import com.portfolioservice.dal.repository.PortfolioRepository;
 import com.portfolioservice.enums.OrderStatusEnum;
 import com.portfolioservice.enums.OrderTypeEnum;
+import com.portfolioservice.enums.RiskProfileEnum;
 import com.portfolioservice.enums.StatusEnum;
 import com.portfolioservice.exception.HoldingNotFoundException;
 import com.portfolioservice.exception.InsufficientHoldingException;
+import com.portfolioservice.exception.InvestorNotFoundException;
 import com.portfolioservice.exception.PortfolioNotFoundException;
 import com.portfolioservice.kafka.producer.OrderEventProducer;
 import lombok.RequiredArgsConstructor;
@@ -29,6 +34,7 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final PortfolioRepository portfolioRepository;
+    private final InvestorRepository investorRepository;
     private final HoldingsRepository holdingsRepository;
     private final OrderEventProducer orderEventProducer;
 
@@ -37,9 +43,9 @@ public class OrderService {
 
         Long portfolioId = createOrderRequest.getPortfolioId();
         String symbol = createOrderRequest.getSymbol();
-        if(!portfolioRepository.existsById(portfolioId)) {
-            throw new PortfolioNotFoundException(portfolioId);
-        }
+        Portfolio portfolio = portfolioRepository.findById(portfolioId)
+                .orElseThrow(() -> new PortfolioNotFoundException(portfolioId));
+        RiskProfileEnum riskProfile = resolveRiskProfile(portfolio);
 
         Order order = createOrderEntity(createOrderRequest, portfolioId, symbol, OrderTypeEnum.BUY);
 
@@ -59,9 +65,15 @@ public class OrderService {
         holdingsRepository.save(holdings);
 
         orderEventProducer.publishOrderExecutedEvent(new OrderExecutedEvent(order.getId(), portfolioId, symbol, OrderTypeEnum.BUY, createOrderRequest.getPrice(), createOrderRequest.getQuantity()));
-        HoldingUpdatedEvent holdingUpdatedEvent=new HoldingUpdatedEvent(portfolioId, symbol, holdings.getQuantity(), holdings.getAveragePrice(), Instant.now());
+        HoldingUpdatedEvent holdingUpdatedEvent=new HoldingUpdatedEvent(portfolioId, symbol, holdings.getQuantity(), holdings.getAveragePrice(), riskProfile, Instant.now());
         orderEventProducer.publishHoldingUpdatedEvent(holdingUpdatedEvent);
         return order.getId();
+    }
+
+    private RiskProfileEnum resolveRiskProfile(Portfolio portfolio) {
+        Investor investor = investorRepository.findById(portfolio.getInvestorId())
+                .orElseThrow(() -> new InvestorNotFoundException(portfolio.getInvestorId()));
+        return investor.getRiskProfile();
     }
 
     private static Order createOrderEntity(CreateOrderRequest createOrderRequest, Long portfolioId, String symbol, OrderTypeEnum orderType) {
@@ -84,9 +96,9 @@ public class OrderService {
 
         String symbol = request.getSymbol();
 
-        if (!portfolioRepository.existsById(portfolioId)) {
-            throw new PortfolioNotFoundException(portfolioId);
-        }
+        Portfolio portfolio = portfolioRepository.findById(portfolioId)
+                .orElseThrow(() -> new PortfolioNotFoundException(portfolioId));
+        RiskProfileEnum riskProfile = resolveRiskProfile(portfolio);
 
         Holdings holdings = holdingsRepository
                 .findByPortfolioIdAndSymbolAndStatus(
@@ -122,7 +134,7 @@ public class OrderService {
         holdingsRepository.save(holdings);
 
         orderEventProducer.publishOrderExecutedEvent(new OrderExecutedEvent(order.getId(), portfolioId, symbol, OrderTypeEnum.SELL, request.getPrice(), request.getQuantity()));
-        HoldingUpdatedEvent holdingUpdatedEvent=new HoldingUpdatedEvent(portfolioId, symbol, holdings.getQuantity(), holdings.getAveragePrice(), Instant.now());
+        HoldingUpdatedEvent holdingUpdatedEvent=new HoldingUpdatedEvent(portfolioId, symbol, holdings.getQuantity(), holdings.getAveragePrice(), riskProfile, Instant.now());
         orderEventProducer.publishHoldingUpdatedEvent(holdingUpdatedEvent);
         return order.getId();
     }
