@@ -23,7 +23,11 @@ Build status:
 
 ## Repository structure
 
-Each service has its own `pom.xml`/`mvnw` and lives in its own top-level directory: `PortfolioService`, `MarketDataService`, `PnlConsumerService`, `AlertService`, `NotificationService`, `RoboAdvisorService`. The root `pom.xml`/`src`/`mvnw` are leftover scaffolding from initial project generation — not a parent/aggregator, not part of the running system. Always work inside the relevant service directory.
+Each service has its own `pom.xml`/`mvnw` and lives in its own top-level directory: `PortfolioService`, `MarketDataService`, `PnlConsumerService`, `AlertService`, `NotificationService`, `RoboAdvisorService`.
+
+The root `pom.xml` is an **aggregator** (`<packaging>pom</packaging>`) listing all six as `<modules>`. It is aggregation only, not inheritance: each service declares `spring-boot-starter-parent` as its own `<parent>` and owns its full dependency set, so nothing is inherited from the root. It exists so IDEs import all six as modules (without it IntelliJ reports "java file is located outside of the module source root" for every service source file) and so `./mvnw clean install` at the root builds everything in one reactor pass. The root's own `src/` — a generated empty `WealthPulseApplication` — was removed when the aggregator was introduced.
+
+For day-to-day work still go into the relevant service directory and use its own `mvnw`; each service builds and runs standalone.
 
 There is no API gateway, service registry, or shared library module — services only communicate via Kafka topics and hand-duplicate the DTO/record definitions they need locally (see `rules/kafka-events.md`).
 

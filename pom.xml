@@ -2,53 +2,44 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
+
+    <!--
+      Inherited only to pin plugin versions to the same set every module already uses
+      (maven-clean-plugin, etc.). No dependencies or dependencyManagement are taken from it
+      here; each service declares spring-boot-starter-parent as its own <parent> independently.
+    -->
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
         <version>4.1.0</version>
-        <relativePath/> <!-- lookup parent from repository -->
+        <relativePath/>
     </parent>
+
     <groupId>com</groupId>
     <artifactId>WealthPulse</artifactId>
     <version>0.0.1-SNAPSHOT</version>
+    <packaging>pom</packaging>
+
     <name>WealthPulse</name>
-    <description>WealthPulse</description>
-    <url/>
-    <licenses>
-        <license/>
-    </licenses>
-    <developers>
-        <developer/>
-    </developers>
-    <scm>
-        <connection/>
-        <developerConnection/>
-        <tag/>
-        <url/>
-    </scm>
-    <properties>
-        <java.version>21</java.version>
-    </properties>
-    <dependencies>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter</artifactId>
-        </dependency>
+    <description>Aggregator for the six Wealth+ microservices</description>
 
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-    </dependencies>
+    <!--
+      Aggregation only - this is NOT a parent. Each service keeps spring-boot-starter-parent
+      as its own <parent> and its own dependency set; Maven treats aggregation and inheritance
+      as independent, so nothing here is inherited by the modules.
 
-    <build>
-        <plugins>
-            <plugin>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-maven-plugin</artifactId>
-            </plugin>
-        </plugins>
-    </build>
+      It exists so that (a) IDEs import all six services as modules instead of treating their
+      sources as "outside the module source root", and (b) `./mvnw install` at the root builds
+      everything in one pass. Each service still builds and runs standalone from its own
+      directory via its own mvnw.
+    -->
+    <modules>
+        <module>PortfolioService</module>
+        <module>MarketDataService</module>
+        <module>PnlConsumerService</module>
+        <module>AlertService</module>
+        <module>NotificationService</module>
+        <module>RoboAdvisorService</module>
+    </modules>
 
 </project>
