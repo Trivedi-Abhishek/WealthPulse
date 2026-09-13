@@ -29,7 +29,7 @@ public class MarketApplicationConfig {
     }
 
     @Bean
-    public WebClient webClient(@Value("${alphavantage.api.baseurl}") String baseUrl) {
+    public WebClient webClient(@Value("${finnhub.api.baseurl}") String baseUrl) {
         return WebClient.builder().baseUrl(baseUrl).build();
     }
 }

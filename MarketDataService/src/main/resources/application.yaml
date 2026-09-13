@@ -14,26 +14,29 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
 
-alphavantage:
+finnhub:
   api:
-    baseurl: https://www.alphavantage.co
-    key: ${ALPHA_VANTAGE_API_KEY:}
+    baseurl: https://finnhub.io/api/v1
+    key: ${FINNHUB_API_KEY:}
 
 resilience4j:
   circuitbreaker:
     instances:
-      alpha-vantage:
+      finnhub:
         failureRateThreshold: 50 # Trips if 50% or more calls fail
         slidingWindowSize: 10 # Evaluates the last 10 calls
 
   retry:
     instances:
-      alpha-vantage:
+      finnhub:
         maxAttempts: 3
         waitDuration: 2s
 
   ratelimiter:
     instances:
-      alpha-vantage:
-        limitForPeriod: 5
+      finnhub:
+        # Finnhub's free tier allows ~60 calls/min. Polling 5 symbols every 30s needs 10,
+        # so this is a ceiling that protects the quota rather than a throttle we expect to hit.
+        # Applied per call now, not per batch as the Alpha Vantage config was.
+        limitForPeriod: 55
         limitRefreshPeriod: 1m
