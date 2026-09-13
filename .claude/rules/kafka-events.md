@@ -42,7 +42,13 @@ This same `ObjectMapper`-based pattern is also used for anything else that needs
 
 ## Consumer pattern
 
-`@KafkaListener(topics = "...", groupId = "wealth-plus-service-group")` methods take a plain `String` parameter and deserialize with `objectMapper.readValue(payload, SomeEvent.class)` inside a try/catch on `JsonProcessingException`. All consumer group IDs are the shared `wealth-plus-service-group` — this is intentional and cross-service, don't give a new service its own group ID without a specific reason.
+`@KafkaListener(topics = "...")` methods take a plain `String` parameter and deserialize with `objectMapper.readValue(payload, SomeEvent.class)` inside a try/catch on `JsonProcessingException`.
+
+**Every consuming service gets its own consumer group**, declared once as `spring.kafka.consumer.group-id` in that service's `application.yaml`. Do not put `groupId` on the annotation — the yaml value is the single source per service.
+
+This rule reverses an earlier one. The codebase originally required every service to share `wealth-plus-service-group`, described as intentional. It was wrong, and it silently broke the architecture: Kafka assigns each partition to exactly one member of a group, so services sharing a group *split* a topic's partitions between them rather than each receiving every message. Verified live with all six services running — one buy order's `HoldingUpdatedEvent` reached only RoboAdvisorService, leaving PnlConsumerService and AlertService with empty read models, while a price partition carrying no symbols sat idle on another service. A new consumer must pick a new, unique group id.
+
+Changing an existing service's group id resets its offsets: with `auto-offset-reset: earliest` it replays the topic from the beginning on next start. That is safe here because the read-model upserts are idempotent, but do it deliberately.
 
 ## Topic ownership
 

@@ -26,7 +26,7 @@ public class RoboAdvisorEventConsumer {
     private final RoboMetricsService roboMetricsService;
     private final RecommendationService recommendationService;
 
-    @KafkaListener(topics = "portfolio.holdings.updated", groupId = "wealth-plus-service-group")
+    @KafkaListener(topics = "portfolio.holdings.updated")
     public void listenPortfolioHoldingsUpdated(String srcHoldingUpdatedEvent) {
         try {
             HoldingUpdatedEvent holdingUpdatedEvent = objectMapper.readValue(srcHoldingUpdatedEvent, HoldingUpdatedEvent.class);
@@ -37,7 +37,7 @@ public class RoboAdvisorEventConsumer {
         }
     }
 
-    @KafkaListener(topics = "market.price.updated", groupId = "wealth-plus-service-group")
+    @KafkaListener(topics = "market.price.updated")
     public void listenMarketStockPriceEvent(String srcMarketStockPriceEvent) {
         try {
             MarketStockPriceEvent marketStockPriceEvent = objectMapper.readValue(srcMarketStockPriceEvent, MarketStockPriceEvent.class);
@@ -48,7 +48,7 @@ public class RoboAdvisorEventConsumer {
         }
     }
 
-    @KafkaListener(topics = "portfolio.metrics.updated", groupId = "wealth-plus-service-group")
+    @KafkaListener(topics = "portfolio.metrics.updated")
     public void listenPortfolioMetricsUpdated(String srcPortfolioMetricsEvent) {
         try {
             PortfolioMetricsEvent portfolioMetricsEvent = objectMapper.readValue(srcPortfolioMetricsEvent, PortfolioMetricsEvent.class);
@@ -59,7 +59,7 @@ public class RoboAdvisorEventConsumer {
         }
     }
 
-    @KafkaListener(topics = "portfolio.rebalance.triggered", groupId = "wealth-plus-service-group")
+    @KafkaListener(topics = "portfolio.rebalance.triggered")
     public void listenPortfolioRebalanceTriggered(String srcPortfolioRebalanceTriggeredEvent) {
         try {
             PortfolioRebalanceTriggeredEvent portfolioRebalanceTriggeredEvent =

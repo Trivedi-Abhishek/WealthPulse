@@ -17,7 +17,7 @@ public class AlertTriggeredEventConsumer {
     private final NotificationService notificationService;
     private final ObjectMapper objectMapper;
 
-    @KafkaListener(topics = "alert.triggered", groupId = "wealth-plus-service-group")
+    @KafkaListener(topics = "alert.triggered")
     public void consumeAlertTriggeredEvent(String message) {
         try {
             AlertTriggeredEvent alertTriggeredEvent = objectMapper.readValue(message, AlertTriggeredEvent.class);

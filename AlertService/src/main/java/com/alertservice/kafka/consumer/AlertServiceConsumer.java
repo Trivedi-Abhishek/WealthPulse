@@ -27,7 +27,7 @@ public class AlertServiceConsumer {
     private final AlertPortfolioHoldingService alertPortfolioHoldingService;
     private final PortfolioAlertService portfolioAlertService;
 
-    @KafkaListener(topics = "market.price.updated", groupId = "wealth-plus-service-group")
+    @KafkaListener(topics = "market.price.updated")
     public void listenMarketStockPriceEvent(String srcMarketStockPriceEvent) {
 
         try {
@@ -41,7 +41,7 @@ public class AlertServiceConsumer {
         }
     }
 
-    @KafkaListener(topics = "portfolio.holdings.updated", groupId = "wealth-plus-service-group")
+    @KafkaListener(topics = "portfolio.holdings.updated")
     public void listenPortfolioHoldingsUpdated(String srcHoldingUpdatedEvent) {
 
         try {
@@ -55,7 +55,7 @@ public class AlertServiceConsumer {
         }
     }
 
-    @KafkaListener(topics = "portfolio.metrics.updated", groupId = "wealth-plus-service-group")
+    @KafkaListener(topics = "portfolio.metrics.updated")
     public void listenPortfolioMetricsUpdated(String srcPortfolioMetricsEvent) {
 
         try {

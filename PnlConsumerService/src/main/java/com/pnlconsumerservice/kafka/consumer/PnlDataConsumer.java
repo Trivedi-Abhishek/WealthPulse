@@ -32,7 +32,7 @@ public class PnlDataConsumer {
     private final PortfolioMetricsRepository portfolioMetricsRepository;
     private final PnlDataProducer pnlDataProducer;
 
-    @KafkaListener(topics = "market.price.updated", groupId = "wealth-plus-service-group")
+    @KafkaListener(topics = "market.price.updated")
     public void listenMarketStockPriceEvent(String srcMarketStockPriceEvent) {
 
         try {
@@ -51,7 +51,7 @@ public class PnlDataConsumer {
     }
 
 
-    @KafkaListener(topics = "portfolio.holdings.updated", groupId = "wealth-plus-service-group")
+    @KafkaListener(topics = "portfolio.holdings.updated")
     public void listenPortfolioHoldingsUpdatedEvent(String srcHoldingUpdatedEvent) {
 
         try {

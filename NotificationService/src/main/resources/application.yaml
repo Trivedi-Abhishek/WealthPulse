@@ -29,7 +29,10 @@ spring:
   kafka:
     bootstrap-servers: localhost:9092
     consumer:
-      group-id: wealth-plus-service-group
+      # One group per service. Kafka assigns each partition to only ONE member of a group, so
+      # sharing a group across services splits every topic between them instead of fanning it
+      # out: each service would see only the partitions it happened to be assigned.
+      group-id: notification-service
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       auto-offset-reset: earliest
