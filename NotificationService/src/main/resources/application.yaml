@@ -1,3 +1,6 @@
+server:
+  port: 8085
+
 spring:
   application:
     name: NotificationService
@@ -11,9 +14,17 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: notification
 
+  # Every service shares wealth_plus_db, so each owns a private schema and its own
+  # Flyway history table — otherwise all five claim version 1 in public.flyway_schema_history
+  # and only the first to boot survives the checksum check.
   flyway:
     enabled: true
+    schemas: notification
+    default-schema: notification
 
   kafka:
     bootstrap-servers: localhost:9092
@@ -22,5 +33,3 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       auto-offset-reset: earliest
-    listener:
-      ack-mode: manual

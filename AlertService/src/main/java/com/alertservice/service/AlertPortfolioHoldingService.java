@@ -18,7 +18,11 @@ public class AlertPortfolioHoldingService {
 
     public void updateHolding(HoldingUpdatedEvent holdingUpdatedEvent) {
 
-        Optional<AlertPortfolioHoldings> optionalAlertPortfolioHoldings=alertPortfolioHoldingsRepository.findByPortfolioIdAndSymbolAndStatus(holdingUpdatedEvent.portfolioId(), holdingUpdatedEvent.symbol(), StatusEnum.A);
+        // Looked up without the status filter. The unique constraint is on (portfolio_id, symbol)
+        // alone, so a symbol sold to zero leaves an inactive row behind; an A-filtered lookup
+        // would miss it on a re-buy and insert a duplicate, failing on the constraint and
+        // wedging this listener on that partition.
+        Optional<AlertPortfolioHoldings> optionalAlertPortfolioHoldings=alertPortfolioHoldingsRepository.findByPortfolioIdAndSymbol(holdingUpdatedEvent.portfolioId(), holdingUpdatedEvent.symbol());
 
         if (holdingUpdatedEvent.quantity() == 0L) {
 
@@ -32,14 +36,15 @@ public class AlertPortfolioHoldingService {
         }
 
         AlertPortfolioHoldings holding =
-                optionalAlertPortfolioHoldings.orElse(
+                optionalAlertPortfolioHoldings.orElseGet(() ->
                         AlertPortfolioHoldings.builder()
                                 .portfolioId(holdingUpdatedEvent.portfolioId())
                                 .symbol(holdingUpdatedEvent.symbol())
                                 .latestMarketPrice(BigDecimal.ZERO)
-                                .status(StatusEnum.A)
                                 .build());
 
+        // Set explicitly rather than only on create, so a re-buy reactivates the existing row.
+        holding.setStatus(StatusEnum.A);
         holding.setQuantity(holdingUpdatedEvent.quantity());
         holding.setAveragePrice(holdingUpdatedEvent.averagePrice());
 

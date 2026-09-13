@@ -12,6 +12,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -29,8 +31,7 @@ public class AlertFiringService {
 
     public void fire(AlertConfiguration config, AlertEvaluationResult result) {
         String dedupKey = "alert:" + config.getId();
-        Boolean firstSeen = redisTemplate.opsForValue().setIfAbsent(dedupKey, Instant.now().toString(), DEDUP_TTL);
-        if (!Boolean.TRUE.equals(firstSeen)) {
+        if (!claimDedupWindow(dedupKey)) {
             log.debug("Alert {} suppressed by dedup window", config.getId());
             return;
         }
@@ -57,5 +58,33 @@ public class AlertFiringService {
         }
 
         log.info("Alert fired: configId={}, type={}, message={}", config.getId(), config.getAlertType(), result.message());
+    }
+
+    /**
+     * Claims the dedup window for this alert config, returning false if another evaluation
+     * already holds it.
+     *
+     * <p>The key is released if the surrounding transaction rolls back. Redis is not
+     * transactional, so a key written before a failed save would outlive the alert_history row
+     * that never existed and silently suppress the alert for the next 30 minutes.
+     */
+    private boolean claimDedupWindow(String dedupKey) {
+        Boolean firstSeen = redisTemplate.opsForValue().setIfAbsent(dedupKey, Instant.now().toString(), DEDUP_TTL);
+        if (!Boolean.TRUE.equals(firstSeen)) {
+            return false;
+        }
+
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCompletion(int status) {
+                    if (status != STATUS_COMMITTED) {
+                        redisTemplate.delete(dedupKey);
+                        log.warn("Released dedup key {} after transaction did not commit", dedupKey);
+                    }
+                }
+            });
+        }
+        return true;
     }
 }

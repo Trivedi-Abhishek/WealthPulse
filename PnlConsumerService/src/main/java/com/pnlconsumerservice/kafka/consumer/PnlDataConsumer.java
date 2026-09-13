@@ -57,18 +57,31 @@ public class PnlDataConsumer {
         try {
             HoldingUpdatedEvent holdingUpdatedEvent = objectMapper.readValue(srcHoldingUpdatedEvent, HoldingUpdatedEvent.class);
             Optional<PortfolioHoldingsSnapshot> optionalSnapshot=portfolioHoldingsSnapshotRepository.findByPortfolioIdAndSymbol(holdingUpdatedEvent.portfolioId(), holdingUpdatedEvent.symbol());
+
             if(holdingUpdatedEvent.quantity()==0L){
+                // Position fully sold. The snapshot must be deactivated and the metrics
+                // recalculated — leaving it active keeps pricing shares the investor no
+                // longer owns on every subsequent market.price.updated for this symbol.
+                optionalSnapshot.ifPresent(snapshot -> {
+                    snapshot.setStatus(StatusEnum.I);
+                    snapshot.setQuantity(0L);
+                    portfolioHoldingsSnapshotRepository.save(snapshot);
+                });
+                recalculatePortfolioMetrics(holdingUpdatedEvent.portfolioId());
                 return;
             }
+
             PortfolioHoldingsSnapshot snapshot =
-                    optionalSnapshot.orElse(
+                    optionalSnapshot.orElseGet(() ->
                             PortfolioHoldingsSnapshot.builder()
                                     .portfolioId(holdingUpdatedEvent.portfolioId())
                                     .symbol(holdingUpdatedEvent.symbol())
                                     .latestMarketPrice(BigDecimal.ZERO)
-                                    .status(StatusEnum.A)
                                     .build());
 
+            // Set explicitly rather than only on create: a re-buy after a full sell has to
+            // reactivate the existing row, since UNIQUE (portfolio_id, symbol) forbids a second one.
+            snapshot.setStatus(StatusEnum.A);
             snapshot.setQuantity(holdingUpdatedEvent.quantity());
             snapshot.setAveragePrice(holdingUpdatedEvent.averagePrice());
 
@@ -84,26 +97,31 @@ public class PnlDataConsumer {
         // collect snapshot list by portfolio id
         List<PortfolioHoldingsSnapshot> portfolioHoldingsSnapshotList=portfolioHoldingsSnapshotRepository.findByPortfolioIdAndStatus(portfolioId, StatusEnum.A);
 
-        if(CollectionUtils.isEmpty(portfolioHoldingsSnapshotList)) {
-            return;
-        }
-
         BigDecimal currentValue=BigDecimal.ZERO;
         BigDecimal investedAmount=BigDecimal.ZERO;
 
-        for(PortfolioHoldingsSnapshot snapshot:portfolioHoldingsSnapshotList) {
-            currentValue=currentValue.add(snapshot.getLatestMarketPrice().multiply(BigDecimal.valueOf(snapshot.getQuantity())));
-            investedAmount=investedAmount.add(snapshot.getAveragePrice().multiply(BigDecimal.valueOf(snapshot.getQuantity())));
+        // An empty list is a real state, not a no-op: the investor sold everything, and the
+        // metrics row has to fall to zero rather than keep its last non-empty value.
+        if(!CollectionUtils.isEmpty(portfolioHoldingsSnapshotList)) {
+            for(PortfolioHoldingsSnapshot snapshot:portfolioHoldingsSnapshotList) {
+                currentValue=currentValue.add(snapshot.getLatestMarketPrice().multiply(BigDecimal.valueOf(snapshot.getQuantity())));
+                investedAmount=investedAmount.add(snapshot.getAveragePrice().multiply(BigDecimal.valueOf(snapshot.getQuantity())));
+            }
         }
 
         Optional<PortfolioMetrics> optionalPortfolioMetrics=portfolioMetricsRepository.findByPortfolioId(portfolioId);
 
-        PortfolioMetrics portfolioMetrics=optionalPortfolioMetrics.orElse(PortfolioMetrics.builder().
+        PortfolioMetrics portfolioMetrics=optionalPortfolioMetrics.orElseGet(() -> PortfolioMetrics.builder().
                 portfolioId(portfolioId).xirr(BigDecimal.ZERO).build());
 
         portfolioMetrics.setInvestedAmount(investedAmount);
         portfolioMetrics.setCurrentValue(currentValue);
         portfolioMetrics.setPnl(currentValue.subtract(investedAmount));
+
+        // Without this save the orElseGet branch builds a transient entity that is never
+        // persisted, so the lookup above misses on every subsequent event and portfolio_metrics
+        // stays permanently empty — the dirty-checking path is never reached.
+        portfolioMetrics = portfolioMetricsRepository.save(portfolioMetrics);
 
         PortfolioMetricsEvent portfolioMetricsEvent = new PortfolioMetricsEvent(portfolioMetrics.getPortfolioId(), portfolioMetrics.getCurrentValue(), portfolioMetrics.getInvestedAmount(), portfolioMetrics.getPnl());
         pnlDataProducer.publishPortfolioMetrics(portfolioMetricsEvent);

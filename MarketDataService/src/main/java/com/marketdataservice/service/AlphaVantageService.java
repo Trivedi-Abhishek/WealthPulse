@@ -36,8 +36,11 @@ public class AlphaVantageService {
     private final RedisTemplate<String, String> redisTemplate;
     private final ObjectMapper objectMapper;
 
+    // Deliberately not final: @RequiredArgsConstructor would put a final field into the
+    // generated constructor, and Lombok does not copy @Value onto constructor parameters
+    // (no lombok.config here), so Spring would try to autowire a String bean and fail.
     @Value("${alphavantage.api.key}")
-    private final String apiKey;
+    private String apiKey;
 
     private static final List<String> SYMBOLS = List.of(
             "AAPL",

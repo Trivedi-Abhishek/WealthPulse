@@ -11,5 +11,8 @@ import java.util.Optional;
 @Repository
 public interface HoldingsRepository  extends JpaRepository<Holdings, Long> {
     Optional<Holdings> findByPortfolioIdAndSymbolAndStatus(Long portfolioId, String symbol, StatusEnum status);
+    // Upsert lookup for buys — must ignore status so a re-buy reactivates the row that the
+    // UNIQUE (portfolio_id, symbol) constraint would otherwise reject.
+    Optional<Holdings> findByPortfolioIdAndSymbol(Long portfolioId, String symbol);
     List<Holdings> findByPortfolioIdAndStatus(Long portfolioId, StatusEnum status);
 }

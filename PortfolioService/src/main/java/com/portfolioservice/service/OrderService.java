@@ -19,12 +19,13 @@ import com.portfolioservice.exception.HoldingNotFoundException;
 import com.portfolioservice.exception.InsufficientHoldingException;
 import com.portfolioservice.exception.InvestorNotFoundException;
 import com.portfolioservice.exception.PortfolioNotFoundException;
-import com.portfolioservice.kafka.producer.OrderEventProducer;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.List;
 
@@ -32,11 +33,17 @@ import java.util.List;
 @RequiredArgsConstructor
 public class OrderService {
 
+    // Matches the NUMERIC(19, 4) precision of holdings.average_price. An unscaled divide()
+    // throws ArithmeticException whenever the result is a non-terminating decimal.
+    private static final int PRICE_SCALE = 4;
+
     private final OrderRepository orderRepository;
     private final PortfolioRepository portfolioRepository;
     private final InvestorRepository investorRepository;
     private final HoldingsRepository holdingsRepository;
-    private final OrderEventProducer orderEventProducer;
+    // Events are handed to Spring rather than to the producer directly; OrderEventProducer
+    // listens AFTER_COMMIT so nothing reaches Kafka for a transaction that later rolls back.
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     @Transactional
     public Long buyOrder(CreateOrderRequest createOrderRequest) {
@@ -51,22 +58,34 @@ public class OrderService {
 
         order=orderRepository.save(order);
 
-        Holdings holdings= holdingsRepository.findByPortfolioIdAndSymbolAndStatus(portfolioId, symbol, StatusEnum.A).map(h -> {
+        // Looked up without the status filter: holdings has a UNIQUE (portfolio_id, symbol)
+        // constraint, so a symbol sold down to zero leaves an inactive row that a re-buy must
+        // reactivate rather than insert alongside.
+        Holdings holdings= holdingsRepository.findByPortfolioIdAndSymbol(portfolioId, symbol).map(h -> {
 
+            if (StatusEnum.I.equals(h.getStatus())) {
+                // Position was fully sold previously; this buy re-opens it with a fresh cost basis.
+                h.setStatus(StatusEnum.A);
+                h.setQuantity(createOrderRequest.getQuantity());
+                h.setAveragePrice(createOrderRequest.getPrice());
+                return h;
+            }
+
+            Long newQuantity = h.getQuantity() + createOrderRequest.getQuantity();
             BigDecimal newAveragePrice= ((h.getAveragePrice().multiply(BigDecimal.valueOf(h.getQuantity())))
-                    .add(createOrderRequest.getPrice().multiply(BigDecimal.valueOf(createOrderRequest.getQuantity())))).divide(BigDecimal.valueOf(h.getQuantity()+createOrderRequest.getQuantity()));
+                    .add(createOrderRequest.getPrice().multiply(BigDecimal.valueOf(createOrderRequest.getQuantity()))))
+                    .divide(BigDecimal.valueOf(newQuantity), PRICE_SCALE, RoundingMode.HALF_UP);
 
             h.setAveragePrice(newAveragePrice);
-            h.setQuantity(h.getQuantity()+createOrderRequest.getQuantity());
+            h.setQuantity(newQuantity);
 
             return h;
-        }).orElse(createHoldings(createOrderRequest));
+        }).orElseGet(() -> createHoldings(createOrderRequest));
 
         holdingsRepository.save(holdings);
 
-        orderEventProducer.publishOrderExecutedEvent(new OrderExecutedEvent(order.getId(), portfolioId, symbol, OrderTypeEnum.BUY, createOrderRequest.getPrice(), createOrderRequest.getQuantity()));
-        HoldingUpdatedEvent holdingUpdatedEvent=new HoldingUpdatedEvent(portfolioId, symbol, holdings.getQuantity(), holdings.getAveragePrice(), riskProfile, Instant.now());
-        orderEventProducer.publishHoldingUpdatedEvent(holdingUpdatedEvent);
+        applicationEventPublisher.publishEvent(new OrderExecutedEvent(order.getId(), portfolioId, symbol, OrderTypeEnum.BUY, createOrderRequest.getPrice(), createOrderRequest.getQuantity()));
+        applicationEventPublisher.publishEvent(new HoldingUpdatedEvent(portfolioId, symbol, holdings.getQuantity(), holdings.getAveragePrice(), riskProfile, Instant.now()));
         return order.getId();
     }
 
@@ -133,9 +152,8 @@ public class OrderService {
 
         holdingsRepository.save(holdings);
 
-        orderEventProducer.publishOrderExecutedEvent(new OrderExecutedEvent(order.getId(), portfolioId, symbol, OrderTypeEnum.SELL, request.getPrice(), request.getQuantity()));
-        HoldingUpdatedEvent holdingUpdatedEvent=new HoldingUpdatedEvent(portfolioId, symbol, holdings.getQuantity(), holdings.getAveragePrice(), riskProfile, Instant.now());
-        orderEventProducer.publishHoldingUpdatedEvent(holdingUpdatedEvent);
+        applicationEventPublisher.publishEvent(new OrderExecutedEvent(order.getId(), portfolioId, symbol, OrderTypeEnum.SELL, request.getPrice(), request.getQuantity()));
+        applicationEventPublisher.publishEvent(new HoldingUpdatedEvent(portfolioId, symbol, holdings.getQuantity(), holdings.getAveragePrice(), riskProfile, Instant.now()));
         return order.getId();
     }
 

@@ -10,10 +10,22 @@ import org.apache.kafka.clients.producer.RecordMetadata;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * Both publish methods fire only AFTER_COMMIT. KafkaTemplate.send hands the record to the
+ * sender thread immediately, so publishing inline from OrderService's @Transactional method
+ * would emit events for a transaction that can still fail at commit — an optimistic-lock
+ * failure on the @Version row, or the UNIQUE (portfolio_id, symbol) constraint — leaving all
+ * three downstream read models holding a holdings update this service rolled back.
+ *
+ * Note these are only reached from within a transaction; @TransactionalEventListener silently
+ * drops events published outside one.
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -22,6 +34,7 @@ public class OrderEventProducer {
     private final KafkaTemplate<String, String> kafkaTemplate;
     private final ObjectMapper objectMapper;
 
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void publishOrderExecutedEvent(OrderExecutedEvent orderExecutedEvent) {
         try {
             CompletableFuture<SendResult<String, String>> future = kafkaTemplate.send("portfolio.order.executed", String.valueOf(orderExecutedEvent.portfolioId()), objectMapper.writeValueAsString(orderExecutedEvent));
@@ -45,6 +58,7 @@ public class OrderEventProducer {
         }
     }
 
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void publishHoldingUpdatedEvent(HoldingUpdatedEvent holdingUpdatedEvent) {
         try {
             CompletableFuture<SendResult<String, String>> future = kafkaTemplate.send("portfolio.holdings.updated", String.valueOf(holdingUpdatedEvent.portfolioId()), objectMapper.writeValueAsString(holdingUpdatedEvent));

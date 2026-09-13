@@ -21,7 +21,11 @@ public class RoboPortfolioHoldingService {
 
     public void updateHolding(HoldingUpdatedEvent holdingUpdatedEvent) {
 
-        Optional<RoboPortfolioHolding> optionalRoboPortfolioHoldings = roboPortfolioHoldingRepository.findByPortfolioIdAndSymbolAndStatus(holdingUpdatedEvent.portfolioId(), holdingUpdatedEvent.symbol(), StatusEnum.A);
+        // Looked up without the status filter. The unique constraint is on (portfolio_id, symbol)
+        // alone, so a symbol sold to zero leaves an inactive row behind; an A-filtered lookup
+        // would miss it on a re-buy and insert a duplicate, failing on the constraint and
+        // wedging this listener on that partition.
+        Optional<RoboPortfolioHolding> optionalRoboPortfolioHoldings = roboPortfolioHoldingRepository.findByPortfolioIdAndSymbol(holdingUpdatedEvent.portfolioId(), holdingUpdatedEvent.symbol());
 
         if(holdingUpdatedEvent.quantity()==0L) {
 
@@ -33,19 +37,20 @@ public class RoboPortfolioHoldingService {
             return;
         }
 
-        RoboPortfolioHolding roboPortfolioHolding=optionalRoboPortfolioHoldings.orElse(
+        RoboPortfolioHolding roboPortfolioHolding=optionalRoboPortfolioHoldings.orElseGet(() ->
                 RoboPortfolioHolding.builder()
                         .portfolioId(holdingUpdatedEvent.portfolioId())
                         .symbol(holdingUpdatedEvent.symbol())
                         .latestMarketPrice(BigDecimal.ZERO)
-                        .status(StatusEnum.A)
                         .build());
 
+        // Set explicitly rather than only on create, so a re-buy reactivates the existing row.
+        roboPortfolioHolding.setStatus(StatusEnum.A);
         roboPortfolioHolding.setQuantity(holdingUpdatedEvent.quantity());
         roboPortfolioHolding.setAveragePrice(holdingUpdatedEvent.averagePrice());
 
         RoboPortfolioProfile profile = roboPortfolioProfileRepository.findByPortfolioId(holdingUpdatedEvent.portfolioId())
-                .orElse(RoboPortfolioProfile.builder()
+                .orElseGet(() -> RoboPortfolioProfile.builder()
                         .portfolioId(holdingUpdatedEvent.portfolioId())
                         .currentValue(BigDecimal.ZERO)
                         .investedAmount(BigDecimal.ZERO)

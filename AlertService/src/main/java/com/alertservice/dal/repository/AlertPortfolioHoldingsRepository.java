@@ -10,7 +10,9 @@ import java.util.Optional;
 
 @Repository
 public interface AlertPortfolioHoldingsRepository extends JpaRepository<AlertPortfolioHoldings, Long> {
-    Optional<AlertPortfolioHoldings> findByPortfolioIdAndSymbolAndStatus(Long portfolioId, String symbol, StatusEnum status);
+    // Upsert lookup — deliberately not status-filtered, so it finds the inactive row a full
+    // sell leaves behind and matches the UNIQUE (portfolio_id, symbol) constraint exactly.
+    Optional<AlertPortfolioHoldings> findByPortfolioIdAndSymbol(Long portfolioId, String symbol);
     List<AlertPortfolioHoldings> findBySymbolAndStatus(String symbol, StatusEnum status);
     List<AlertPortfolioHoldings> findByPortfolioIdAndStatus(Long portfolioId, StatusEnum status);
 }
