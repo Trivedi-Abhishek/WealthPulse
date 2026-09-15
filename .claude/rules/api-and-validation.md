@@ -24,6 +24,8 @@ public class CreateThingRequest {
 
 Controllers take `@RequestBody @Valid SomeRequest` — the `@Valid` is not optional, Spring won't validate without it.
 
+Constraints placed directly on `@RequestParam`/`@PathVariable` arguments (`@NotNull Long portfolioId`) are only enforced when the controller class carries `@Validated`, as `OrderController`, `HoldingsController`, `NotificationController` and `RecommendationController` do. Type path variables as `Long` rather than `String` + `Long.valueOf`, so a non-numeric id is a 400 binding error rather than a 500 `NumberFormatException`. `PortfolioController` currently violates both rules (and misspells its param as `portfolio_mame`); fixing that is scheduled in Phase 10.
+
 ## Response shape
 
 Create endpoints return `ResponseEntity<Long>` with just the created entity's ID — consistent across `POST /investors`, `POST /investors/{id}/portfolios`, `POST /orders/buy`, `POST /orders/sell`. Read endpoints return `ResponseEntity<List<Entity>>` of the JPA entity directly (no separate response DTO layer yet — fine at this scale, revisit if entities start needing to hide fields from the API).

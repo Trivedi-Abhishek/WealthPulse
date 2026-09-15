@@ -38,6 +38,14 @@ public class SomeProducer {
 }
 ```
 
+### Publishing from a `@Transactional` method: after commit only
+
+`KafkaTemplate.send` hands the record to the sender thread immediately, so it is not rolled back with the database. If the event is sent inline from a `@Transactional` method, a commit that fails afterwards leaves every downstream read model holding a change that never happened. Examples: an optimistic-lock conflict or a unique-constraint violation.
+
+When a producer is triggered by a DB mutation, the service calls `ApplicationEventPublisher.publishEvent(event)` inside the transaction. The producer method is annotated `@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)` instead of being called directly. See `PortfolioService.OrderService` → `OrderEventProducer`. Caveat: `@TransactionalEventListener` **silently drops** events published outside an active transaction, so only use it on paths that are always transactional.
+
+This is an interim measure. A crash between commit and send still loses the event. The transactional outbox (Phase 12 in `BUILD_PHASES.md`) replaces it for the DB-backed producers.
+
 This same `ObjectMapper`-based pattern is also used for anything else that needs to serialize a domain object to a string payload — e.g. `MarketDataService`'s Redis price cache uses it too, for consistency, instead of a Spring Data Redis Jackson serializer wrapper.
 
 ## Consumer pattern
@@ -49,6 +57,10 @@ This same `ObjectMapper`-based pattern is also used for anything else that needs
 This rule reverses an earlier one. The codebase originally required every service to share `wealth-plus-service-group`, described as intentional. It was wrong, and it silently broke the architecture: Kafka assigns each partition to exactly one member of a group, so services sharing a group *split* a topic's partitions between them rather than each receiving every message. Verified live with all six services running — one buy order's `HoldingUpdatedEvent` reached only RoboAdvisorService, leaving PnlConsumerService and AlertService with empty read models, while a price partition carrying no symbols sat idle on another service. A new consumer must pick a new, unique group id.
 
 Changing an existing service's group id resets its offsets: with `auto-offset-reset: earliest` it replays the topic from the beginning on next start. That is safe here because the read-model upserts are idempotent, but do it deliberately.
+
+**Don't set `spring.kafka.listener.ack-mode: manual`** unless the listener takes an `Acknowledgment` parameter and calls `acknowledge()`. Four services once had it set with no such parameter, so offsets never committed and every restart replayed the whole topic. The default `BATCH` mode is what the listener code in this repo assumes.
+
+Delivery is at-least-once, so every consumer must be idempotent. Read-model writes are upserts on the table's unique key. `NotificationService`'s audit-log insert is the one append-only consumer; it relies on committed offsets to avoid duplicates.
 
 ## Topic ownership
 
